@@ -1,0 +1,23 @@
+# ai_gpu_grid_sim/config.yaml
+
+# System-Level Configuration
+num_gpus: 16             # Number of GPUs (must be a perfect square: 4, 16, etc.)
+topology: "mesh"         # Network topology (currently only mesh is supported)
+
+# Traffic Configuration
+# Options: "uniform_random", "transpose", "hotspot"
+traffic_pattern: "transpose" 
+hotspot_nodes: [5] # A list of nodes to act as hotspots.
+hotspot_rate: 0.5   # The probability a packet is a hotspot packet
+injection_rate: 0.05     # Probability of a node generating a packet per cycle (0.0 to 1.0)
+routing_algo: "adaptive"     # Routing algorithm
+congestion_threshold: 0.75 # Buffer fill percentage to consider a path congested
+num_virtual_channels: 4
+
+# Simulation Control
+simulation_cycles: 1000  # Total number of cycles to run the simulation
+
+# --- Future parameters from your spec can be added here ---
+# vc_per_port: 2
+# flit_width_bits: 64
+# router_buffer_size: 4
