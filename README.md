@@ -104,4 +104,30 @@ This simulator provides a strong foundation for further research. Potential exte
   * **Deeper Protocol Modeling**: Implement specific CHI messages to model cache coherence traffic.
   * **New Topologies**: Extend the `Network` class to support other interconnect topologies, such as Torus or Dragonfly.
   * **Power and Area Modeling**: Add simple energy models to estimate power consumption based on router activity (buffer reads/writes, crossbar traversals).
-  * **RTL Implementation**: Use the validated architectural principles as a specification for a hardware implementation in Verilog/SystemVerilog.
+  * **Architectural and Topology Enhancements**:
+
+    Implement a Hierarchical Network Model: The current flat mesh topology can be evolved into a two-level hierarchical network. This would involve simulating multiple NoC clusters (nodes) connected by a higher-level switched fabric, reflecting modern rack-scale designs.
+
+    Model a Flattened Butterfly Topology: For the intra-node fabric, implement a Flattened Butterfly topology as proposed in the design. This would allow for a direct, quantitative comparison against the 2D Mesh to evaluate its superior performance-to-area ratio for GPU-specific "many-to-few" traffic patterns.
+
+    Extend to 3D Topologies: To align with the industry trend of 3D integration, enhance the Network class to support 3D mesh configurations (e.g., 4x4x2). This would enable the modeling of vertically stacked chiplets and the analysis of reduced wire-length latency.
+
+  * **Advanced Protocol Feature Modeling (AMBA 5 CHI)**:
+
+    Implement Cache Stashing: Introduce a new transaction type that allows a node (e.g., a GPU) to push a cache line directly into another node's cache (e.g., a CPU's L3). This involves modifying the node and tracker logic to simulate this direct data transfer, bypassing main memory and reducing latency in producer-consumer workloads.
+
+    Model Far Atomic Operations: Offload atomic operations (e.g., AtomicAdd) from the compute nodes to the interconnect itself. This can be modeled by creating specific atomic packet types that are handled at a designated "Home Node," reducing traffic for shared variables and synchronization primitives.
+
+    Introduce Quality of Service (QoS): Add a QoS field to packets and update the router's arbitration logic to prioritize high-QoS traffic. This would allow for the analysis of how prioritizing latency-sensitive memory reads over bulk data transfers affects overall application performance in a congested network.
+
+  * **Advanced Simulation and Verification**:
+
+    Incorporate Realistic Application Workloads: Move beyond synthetic patterns by driving the simulator with real memory access traces. These traces can be collected from GPU applications like large-scale graph traversal algorithms or representative deep learning models to evaluate the interconnect under realistic, bursty, and data-dependent traffic.
+
+    Integrate a Power Estimation Model: Enhance the MetricsTracker to include power analysis. By assigning an energy cost to fundamental operations (e.g., buffer read/write, crossbar traversal), the simulator can report on average power consumption and energy-per-bit, adding a critical metric to the PPA (Power, Performance, Area) analysis.
+
+    Port to a Cycle-Accurate Simulator: For final validation, the architectural principles confirmed in this Python model can be ported to a cycle-accurate simulator like gem5. Leveraging gem5's native support for the AMBA 5 CHI protocol and detailed GPU models would allow for performance validation against a full software stack.
+
+  * **Physical Layer Evolution**:
+
+    Model a Co-Packaged Optics (CPO) Fabric: For the inter-node network, model a switched fabric that uses co-packaged optics. This would involve adjusting the link latency and power consumption parameters to reflect the significant advantages of optical signaling over electrical connections for rack-scale distances, future-proofing the design.
