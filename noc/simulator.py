@@ -19,10 +19,7 @@ class Simulator:
         self.config = config
         self.num_gpus = config['num_gpus']
         
-        # --- THIS IS THE FIX ---
-        # Pass the whole config dict to the Network constructor, not individual arguments.
         self.network = Network(config=config)
-        
         self.tracker = MetricsTracker()
         
         self.nodes: list[Node] = []
@@ -41,7 +38,10 @@ class Simulator:
         for i, node in enumerate(self.nodes):
             y = i // self.network.grid_width
             x = i % self.network.grid_width
-            self.node_router_map[node] = self.network.get_router(x, y)
+            
+            # --- THIS IS THE FIX ---
+            # Pass the coordinates as a single tuple to match the method definition
+            self.node_router_map[node] = self.network.get_router((x, y))
             
         self.current_cycle = 0
 

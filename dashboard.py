@@ -1,13 +1,21 @@
-# dashboard.py
+# dashboard.py (Corrected for Matplotlib Backend)
 
 import dash
 from dash import dcc, html, Input, Output, State
 import yaml
 import numpy as np
-import matplotlib.pyplot as plt
 import io
 import base64
 
+# --- THIS IS THE FIX ---
+# Set the backend for Matplotlib to a non-interactive one.
+# This must be done BEFORE importing matplotlib.pyplot.
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
+
+# Import the simulator from the parent directory
 from noc.simulator import Simulator
 
 # --- Matplotlib Plotting Function ---
@@ -17,12 +25,12 @@ def create_plot(x_data, y_data, config):
     plt.plot(x_data, y_data, marker='o', linestyle='-')
     
     traffic_pattern = config.get('traffic_pattern', 'N/A')
-    plt.title(f'Network Performance under "{traffic_pattern}" Load')
+    topology = config.get('topology', 'N/A')
+    plt.title(f'Network Performance: {topology.capitalize()} under "{traffic_pattern}" Load')
     plt.xlabel('Injection Rate (packets/node/cycle)')
     plt.ylabel('Average Packet Latency (cycles)')
     plt.grid(True)
     
-    # Save plot to a bytes buffer and encode it
     buf = io.BytesIO()
     plt.savefig(buf, format='png')
     plt.close() # Close the plot to free up memory
@@ -38,6 +46,18 @@ app.layout = html.Div([
     html.Div([ # Control Panel
         html.H3("Simulation Configuration"),
         
+        html.Label("Topology:"),
+        dcc.Dropdown(
+            id='topology-dropdown',
+            options=[
+                {'label': '2D Mesh', 'value': 'mesh'},
+                {'label': '2D Torus', 'value': 'torus'},
+                {'label': 'Fat-Tree (Not Implemented)', 'value': 'fat_tree', 'disabled': True},
+                {'label': 'Flattened Butterfly (Not Implemented)', 'value': 'flattened_butterfly', 'disabled': True}
+            ],
+            value='mesh'
+        ),
+
         html.Label("Traffic Pattern:"),
         dcc.Dropdown(
             id='traffic-pattern-dropdown',
@@ -87,25 +107,25 @@ app.layout = html.Div([
     [Output('results-summary', 'children'),
      Output('results-graph', 'src')],
     [Input('run-button', 'n_clicks')],
-    [State('traffic-pattern-dropdown', 'value'),
+    [State('topology-dropdown', 'value'),
+     State('traffic-pattern-dropdown', 'value'),
      State('routing-algo-dropdown', 'value'),
      State('num-vcs-input', 'value'),
      State('sim-cycles-input', 'value')]
 )
-def run_simulation_sweep(n_clicks, traffic_pattern, routing_algo, num_vcs, sim_cycles):
+def run_simulation_sweep(n_clicks, topology, traffic_pattern, routing_algo, num_vcs, sim_cycles):
     if n_clicks == 0:
         return "Click 'Run Experiment Sweep' to start.", ""
 
-    # Load base config and override with UI values
     with open('config.yaml', 'r') as f:
         config = yaml.safe_load(f)
         
+    config['topology'] = topology
     config['traffic_pattern'] = traffic_pattern
     config['routing_algo'] = routing_algo
     config['num_virtual_channels'] = num_vcs
     config['simulation_cycles'] = sim_cycles
 
-    # Define the experiment sweep
     injection_rates = np.arange(0.01, 0.16, 0.02)
     latencies = []
     
@@ -119,8 +139,7 @@ def run_simulation_sweep(n_clicks, traffic_pattern, routing_algo, num_vcs, sim_c
         avg_latency = simulator.tracker.calculate_average_latency()
         latencies.append(avg_latency)
 
-    # Prepare results
-    summary_text = f"Experiment Complete. Pattern: {traffic_pattern}, Routing: {routing_algo}, VCs: {num_vcs}."
+    summary_text = f"Experiment Complete. Topology: {topology.capitalize()}, Pattern: {traffic_pattern}, Routing: {routing_algo}, VCs: {num_vcs}."
     graph_src = create_plot(injection_rates, latencies, config)
 
     return summary_text, graph_src

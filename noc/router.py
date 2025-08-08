@@ -61,13 +61,40 @@ class Router:
         return best_port
     
     def _compute_route_xy(self, flit: Flit) -> Port:
+        """Original XY routing logic, now with Torus shortest-path awareness."""
         dest_x, dest_y = self._get_dest_coords(flit)
-        if dest_x != self.coords[0]:
-            return Port.EAST if dest_x > self.coords[0] else Port.WEST
-        elif dest_y != self.coords[1]:
-            return Port.SOUTH if dest_y > self.coords[1] else Port.NORTH
+        
+        # If we're a Torus, check for shorter wrap-around path
+        if self.network.config.get('topology') == 'torus':
+            # Check X-dimension
+            if dest_x != self.coords[0]:
+                # Distance going right vs wrapping around left
+                dist_right = (dest_x - self.coords[0] + self.grid_width) % self.grid_width
+                dist_left = (self.coords[0] - dest_x + self.grid_width) % self.grid_width
+                if dist_right < dist_left:
+                    return Port.EAST
+                else:
+                    return Port.WEST
+            # Check Y-dimension
+            elif dest_y != self.coords[1]:
+                # Distance going south vs wrapping around north
+                dist_south = (dest_y - self.coords[1] + self.grid_width) % self.grid_width
+                dist_north = (self.coords[1] - dest_y + self.grid_width) % self.grid_width
+                if dist_south < dist_north:
+                    return Port.SOUTH
+                else:
+                    return Port.NORTH
+            else:
+                return Port.LOCAL
+        
+        # Original Mesh logic (fallback)
         else:
-            return Port.LOCAL
+            if dest_x != self.coords[0]:
+                return Port.EAST if dest_x > self.coords[0] else Port.WEST
+            elif dest_y != self.coords[1]:
+                return Port.SOUTH if dest_y > self.coords[1] else Port.NORTH
+            else:
+                return Port.LOCAL
 
     def process_cycle(self) -> dict[Port, Flit]:
         routing_requests: dict[Port, list[tuple[Flit, int]]] = collections.defaultdict(list)
