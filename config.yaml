@@ -5,6 +5,10 @@ num_gpus: 16             # Number of GPUs (must be a perfect square: 4, 16, etc.
 topology: "fat_tree"         # Network topology (currently only mesh is supported)
 fat_tree_k: 4 # Port count of switches (must be even)
 random_seed: 42
+traffic_pattern: "all_reduce" 
+workload:
+  all_reduce_data_size: 16 # Total number of data chunks per node
+  all_reduce_chunk_size_flits: 4 # Size of each chunk in flits (determines packet size)
 # Traffic Configuration
 # Options: "uniform_random", "transpose", "hotspot"
 traffic_pattern: "uniform_random" 

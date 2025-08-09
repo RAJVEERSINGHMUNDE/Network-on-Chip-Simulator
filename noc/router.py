@@ -3,7 +3,7 @@
 import collections
 import math
 from enum import IntEnum, auto
-
+import random 
 from .packet import Flit
 
 # Forward declaration for type hinting
@@ -101,9 +101,24 @@ class Router:
             if dest_edge_id == current_edge_id:
                 return flit.dest_address % nodes_per_switch
             else:
-                # Find the least congested "up" port
+                # --- START: MODIFIED LOGIC ---
                 up_ports = range(nodes_per_switch, k)
-                return min(up_ports, key=lambda p: self._get_buffer_fullness(p))
+                
+                # Step 1: Calculate the fullness of all possible upward ports
+                port_fullness = {p: self._get_buffer_fullness(p) for p in up_ports}
+                
+                # Step 2: Find the minimum fullness value observed
+                if not port_fullness: # Should not happen in a connected fat-tree
+                    return nodes_per_switch 
+                min_fullness = min(port_fullness.values())
+                
+                # Step 3: Identify all ports that are equally best (at min_fullness)
+                best_ports = [p for p, f in port_fullness.items() if f == min_fullness]
+                
+                # Step 4: Randomly choose one of these best ports to break ties
+                return random.choice(best_ports)
+                # --- END: MODIFIED LOGIC ---
+
         elif self.type == 'core':
             return dest_pod # Down path is deterministic
         raise TypeError("Unknown router type for Fat-Tree")

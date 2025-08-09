@@ -51,10 +51,35 @@ class Node:
         while dest_id == self.node_id:
             dest_id = random.randint(0, self.num_nodes - 1)
         return dest_id
+    
+    def inject_workload_packet(self, dest_id: int, packet_size_flits: int, current_cycle: int, transaction_id: int):
+        """Injects a packet as instructed by an external workload manager."""
+        if packet_size_flits <= 0: return
+
+        # Create a dummy payload of the correct size
+        dummy_payload = list(range(packet_size_flits))
+
+        new_packet = Packet(
+            packet_type=PacketType.WRITE,
+            src_address=self.node_id,
+            dest_address=dest_id,
+            transaction_id=transaction_id,
+            data_payload=dummy_payload,
+            creation_time=current_cycle
+        )
+        self.tracker.record_packet_creation(new_packet.packet_id, new_packet.creation_time)
+        
+        # Use a random VC for now, or implement a more sophisticated scheme
+        vc_id = random.randint(0, self.config['num_virtual_channels'] - 1)
+        flits = self._packetize(new_packet, vc_id)
+        self.injection_queue.extend(flits)
+        self.packets_sent += 1
 
     def _generate_traffic(self, current_cycle: int):
+        """Generates synthetic traffic based on statistical patterns."""
         if random.random() < self.injection_rate:
             dest_id = self._get_destination()
+            # This logic is now consolidated from inject_workload_packet
             new_packet = Packet(
                 packet_type=PacketType.WRITE, src_address=self.node_id, dest_address=dest_id,
                 transaction_id=random.randint(0, 65535),
@@ -67,10 +92,24 @@ class Node:
             self.injection_queue.extend(flits)
             self.packets_sent += 1
 
-    def receive_flit(self, flit: Flit, current_cycle: int):
+    def receive_flit(self, flit: Flit, current_cycle: int) -> dict | None:
+        """
+        Processes a received flit. If it's a TAIL flit, it completes a packet
+        and returns the packet's info for the simulator to process.
+        """
+        # Reassembly buffer logic would go here if we were re-ordering flits
+        # For now, we just care about the TAIL flit
         if flit.flit_type == FlitType.TAIL:
             self.packets_received += 1
             self.tracker.record_packet_receipt(flit.packet_id, current_cycle)
+            # Return key info for the workload manager
+            return {
+                "packet_id": flit.packet_id,
+                "src_address": flit.src_address,
+                "dest_address": flit.dest_address
+            }
+        return None # Packet not yet complete
 
     def process_cycle(self, current_cycle: int):
+        """Generates traffic for the next cycle (for synthetic patterns only)."""
         self._generate_traffic(current_cycle)
