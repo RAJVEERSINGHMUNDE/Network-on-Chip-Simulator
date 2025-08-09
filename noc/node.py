@@ -2,7 +2,7 @@
 
 import collections
 import random
-
+import warnings
 from .packet import Packet, PacketType, Flit, FlitType
 from metrics.tracker import MetricsTracker
 
@@ -66,15 +66,27 @@ class Node:
 
     def _get_destination(self) -> int:
         """Selects a destination node based on the configured traffic pattern."""
+        
+        # --- FIX: Check for topology/pattern compatibility ---
+        if self.traffic_pattern == "transpose":
+            if self.coords is None:
+                warnings.warn(f"Node {self.node_id}: 'transpose' pattern is only valid for grid topologies. Falling back to uniform_random.")
+                # Fall through to uniform random logic
+            else:
+                # Destination is (y, x)
+                dest_y, dest_x = self.coords
+                dest_id = dest_y * self.grid_width + dest_x
+                # Avoid sending to self if it's a diagonal node in a square grid
+                if dest_id == self.node_id:
+                    pass # Fall through to uniform random
+                else:
+                    return dest_id
+
         if self.traffic_pattern == "hotspot" and self.hotspot_nodes and random.random() < self.hotspot_rate:
             if self.node_id not in self.hotspot_nodes:
                 return random.choice(self.hotspot_nodes)
 
-        if self.traffic_pattern == "transpose":
-            dest_y, dest_x = self.coords
-            dest_id = dest_y * self.grid_width + dest_x
-            return dest_id
-
+        # --- Uniform Random Pattern (Default/Fallback) ---
         dest_id = self.node_id
         while dest_id == self.node_id:
             dest_id = random.randint(0, self.num_nodes - 1)

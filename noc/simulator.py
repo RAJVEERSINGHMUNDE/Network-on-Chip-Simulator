@@ -1,4 +1,4 @@
-# ai_gpu_grid_sim/noc/simulator.py (Corrected)
+# ai_gpu_grid_sim/noc/simulator.py (Consolidated Fix)
 
 import math
 from .network import Network
@@ -23,52 +23,61 @@ class Simulator:
         self.tracker = MetricsTracker()
         
         self.nodes: list[Node] = []
+        # Create nodes, assigning coordinates only if it's a grid topology
         for i in range(self.num_gpus):
-            y = i // self.network.grid_width
-            x = i % self.network.grid_width
-            node = Node(
-                node_id=i,
-                coords=(x, y),
-                config=self.config,
-                tracker=self.tracker
-            )
+            coords = None
+            if self.network.grid_width is not None:
+                 coords = (i % self.network.grid_width, i // self.network.grid_width)
+            node = Node(node_id=i, coords=coords, config=self.config, tracker=self.tracker)
             self.nodes.append(node)
         
-        self.node_router_map: dict[Node, Router] = {}
-        for i, node in enumerate(self.nodes):
-            y = i // self.network.grid_width
-            x = i % self.network.grid_width
-            
-            # --- THIS IS THE FIX ---
-            # Pass the coordinates as a single tuple to match the method definition
-            self.node_router_map[node] = self.network.get_router((x, y))
+        # The Network class is responsible for creating the node-to-router map for ALL topologies.
+        # The simulator simply uses the map provided by the network.
+        self.node_to_router_map = self.network.node_to_router_map
+
+        # Create the reverse map for easy lookup during ejection
+        self.router_port_to_node_map: dict[tuple[Router, Port], int] = \
+            {val: key for key, val in self.node_to_router_map.items()}
             
         self.current_cycle = 0
 
     def _single_cycle(self):
         """Executes all the logic for a single clock cycle."""
+        # 1. Routers decide where to forward flits from their input buffers
         forwarding_decisions = {}
         for router in self.network.routers.values():
             forwarding_decisions[router] = router.process_cycle()
 
+        # 2. Move flits between routers based on forwarding decisions
         for router, decisions in forwarding_decisions.items():
             for out_port, flit in decisions.items():
-                if out_port == Port.LOCAL:
+                # If the destination is a node (ejection), skip the router-to-router transfer
+                if (router, out_port) in self.router_port_to_node_map:
                     continue
                 
+                # Otherwise, find the destination router and move the flit
                 dest_router, dest_in_port = self.network.connections[router][out_port]
                 dest_router.input_buffers[dest_in_port][flit.vc_id].append(flit)
 
-        for node, router in self.node_router_map.items():
+        # 3. Move flits from Nodes to Routers (Injection)
+        # Iterate over the master list of node objects to ensure correctness
+        for node in self.nodes:
             if node.injection_queue:
                 flit_to_inject = node.injection_queue.popleft()
-                router.input_buffers[Port.LOCAL][flit_to_inject.vc_id].append(flit_to_inject)
+                # Look up the connection using the node's ID
+                router, port_on_router = self.node_to_router_map[node.node_id]
+                # Place the flit into the correct input buffer and VC on the router
+                router.input_buffers[port_on_router][flit_to_inject.vc_id].append(flit_to_inject)
 
-        for node, router in self.node_router_map.items():
-            if Port.LOCAL in forwarding_decisions[router]:
-                ejected_flit = forwarding_decisions[router][Port.LOCAL]
-                node.receive_flit(ejected_flit, self.current_cycle)
+        # 4. Move flits from Routers to Nodes (Ejection)
+        for router, decisions in forwarding_decisions.items():
+            for out_port, ejected_flit in decisions.items():
+                # Check if the destination is a node
+                if (router, out_port) in self.router_port_to_node_map:
+                    dest_node_id = self.router_port_to_node_map[(router, out_port)]
+                    self.nodes[dest_node_id].receive_flit(ejected_flit, self.current_cycle)
 
+        # 5. Nodes generate new traffic for the *next* cycle
         for node in self.nodes:
             node.process_cycle(self.current_cycle)
             
@@ -80,7 +89,6 @@ class Simulator:
         for i in range(num_cycles):
             if i % 100 == 0 and i > 0:
                 print(f"--- Cycle {i} ---")
-        
             self._single_cycle()
         print(f"--- Cycle {self.current_cycle} ---")
         print("Simulation finished.")

@@ -1,4 +1,4 @@
-# dashboard.py (Corrected for Matplotlib Backend)
+# dashboard.py
 
 import dash
 from dash import dcc, html, Input, Output, State
@@ -6,8 +6,9 @@ import yaml
 import numpy as np
 import io
 import base64
+import random
+import warnings
 
-# --- THIS IS THE FIX ---
 # Set the backend for Matplotlib to a non-interactive one.
 # This must be done BEFORE importing matplotlib.pyplot.
 import matplotlib
@@ -52,7 +53,7 @@ app.layout = html.Div([
             options=[
                 {'label': '2D Mesh', 'value': 'mesh'},
                 {'label': '2D Torus', 'value': 'torus'},
-                {'label': 'Fat-Tree (Not Implemented)', 'value': 'fat_tree', 'disabled': True},
+                {'label': 'Fat-Tree', 'value': 'fat_tree'},
                 {'label': 'Flattened Butterfly (Not Implemented)', 'value': 'flattened_butterfly', 'disabled': True}
             ],
             value='mesh'
@@ -69,7 +70,7 @@ app.layout = html.Div([
             value='transpose'
         ),
         
-        html.Label("Routing Algorithm:"),
+        html.Label("Routing Algorithm (for Mesh/Torus):"),
         dcc.Dropdown(
             id='routing-algo-dropdown',
             options=[
@@ -126,6 +127,12 @@ def run_simulation_sweep(n_clicks, topology, traffic_pattern, routing_algo, num_
     config['num_virtual_channels'] = num_vcs
     config['simulation_cycles'] = sim_cycles
 
+    # Seed the random number generator for reproducible results
+    seed = config.get('random_seed', None)
+    random.seed(seed)
+    print(f"--- Running experiment with Random Seed: {seed} ---")
+    
+    # Define the range of injection rates for the experiment
     injection_rates = np.arange(0.01, 0.16, 0.02)
     latencies = []
     
@@ -133,10 +140,23 @@ def run_simulation_sweep(n_clicks, topology, traffic_pattern, routing_algo, num_
         sim_config = config.copy()
         sim_config['injection_rate'] = rate
         
-        simulator = Simulator(config=sim_config)
-        simulator.run(num_cycles=sim_config['simulation_cycles'])
-        
-        avg_latency = simulator.tracker.calculate_average_latency()
+        try:
+            # Catch warnings (e.g., transpose on fat-tree) and print them
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                
+                simulator = Simulator(config=sim_config)
+                simulator.run(num_cycles=sim_config['simulation_cycles'])
+                avg_latency = simulator.tracker.calculate_average_latency()
+                
+                if w:
+                    for warning_message in w:
+                        print(f"Warning: {warning_message.message}")
+
+        except Exception as e:
+            # If a critical error occurs, display it in the UI
+            return f"An error occurred: {e}", ""
+            
         latencies.append(avg_latency)
 
     summary_text = f"Experiment Complete. Topology: {topology.capitalize()}, Pattern: {traffic_pattern}, Routing: {routing_algo}, VCs: {num_vcs}."
