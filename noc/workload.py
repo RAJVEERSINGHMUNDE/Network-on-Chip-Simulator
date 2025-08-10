@@ -1,13 +1,7 @@
-# ai_gpu_grid_sim/noc/workload.py
-
 from .node import Node
 
 class AllReduceWorkload:
-    """
-    Manages the simulation of a Ring All-Reduce communication collective.
-    This workload is now chunk-aware and will repeat the two-phase process
-    for each chunk of data specified in the configuration.
-    """
+
     def __init__(self, config: dict, tracker, nodes: list[Node]):
         self.config = config
         self.tracker = tracker
@@ -20,9 +14,8 @@ class AllReduceWorkload:
         self.node_states = [{'phase': 'IDLE', 'step': 0, 'chunk_idx': 0} for _ in range(self.num_nodes)]
 
     def initialize(self, start_cycle: int):
-        """Kicks off the All-Reduce operation."""
+
         print(f"[{start_cycle}] WORKLOAD: Starting Ring All-Reduce for {self.num_nodes} nodes, {self.data_size} chunks.")
-        # Handle the edge case where data_size is 0 or less
         if self.data_size <= 0:
             for i in range(self.num_nodes):
                 self.node_states[i]['phase'] = 'IDLE'
@@ -32,19 +25,14 @@ class AllReduceWorkload:
             self.node_states[i]['phase'] = 'SCATTER_REDUCE'
             self._send_next_packet(i, start_cycle)
 
-    # --- NEW METHOD ---
+
     def is_complete(self) -> bool:
-        """
-        Checks if all nodes have completed the workload.
-        Returns True if all nodes are in the 'IDLE' phase, False otherwise.
-        """
         for state in self.node_states:
             if state['phase'] != 'IDLE':
                 return False
         return True
 
     def on_packet_received(self, node_id: int, src_id: int, current_cycle: int):
-        """Callback triggered by the simulator when a node receives a TAIL flit."""
         state = self.node_states[node_id]
         if state['phase'] == 'IDLE':
             return
@@ -68,7 +56,6 @@ class AllReduceWorkload:
         self._send_next_packet(node_id, current_cycle)
 
     def _send_next_packet(self, node_id: int, current_cycle: int):
-        """Instructs a node to create and inject the correct packet for its current state."""
         state = self.node_states[node_id]
         if state['phase'] == 'IDLE':
             return

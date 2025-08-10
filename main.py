@@ -1,5 +1,3 @@
-# ai_gpu_grid_sim/main.py (Final Version)
-
 import yaml
 from noc.simulator import Simulator
 
@@ -12,16 +10,15 @@ def main():
     num_cycles = config['simulation_cycles']
     pattern = config['traffic_pattern']
 
-    print("--- AI GPU Grid NoC Simulator ---")
+    print("AI GPU Grid NoC Simulator")
     print(f"Configuration: {num_gpus} GPUs, Pattern: {pattern}, "
           f"Cycles: {num_cycles}")
 
-    # Pass the whole config dictionary
     simulator = Simulator(config=config)
 
     simulator.run(num_cycles=num_cycles)
     
-    print("\n--- Simulation Metrics Summary ---")
+    print("\n Simulation Metrics Summary")
     tracker = simulator.tracker
     
     total_packets_sent = sum(node.packets_sent for node in simulator.nodes)

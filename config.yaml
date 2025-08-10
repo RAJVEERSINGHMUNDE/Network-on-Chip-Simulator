@@ -1,34 +1,21 @@
-# ai_gpu_grid_sim/config.yaml
-
-# --- System-Level Configuration ---
-# Options: "monolithic", "hybrid_electrical"
 architecture: "hybrid_electrical" 
-num_gpus: 16             # Must be a perfect square for Mesh and compatible with Fat-Tree k
+num_gpus: 16             
 random_seed: 42
 
-# --- Topology Configuration ---
-# The 'topology' key is now the default/primary topology
-topology: "mesh"
-# Fat-Tree 'k' parameter, used if fat_tree is primary or secondary
-fat_tree_k: 4 # Port count of switches (must be even)
 
-# --- NEW: Configuration for the electrical hybrid mode ---
+topology: "mesh"
+fat_tree_k: 4 
 hybrid_electrical_config:
-  # Define the topology for the secondary, specialized network
   secondary_topology: "fat_tree"
-  # List of traffic patterns to route onto the secondary network
   secondary_traffic: ["all_reduce"]
 
-# --- Traffic Configuration ---
-# Options: "uniform_random", "transpose", "hotspot", "all_reduce"
 traffic_pattern: "all_reduce" 
 injection_rate: 0.05
 hotspot_nodes: [5]
 hotspot_rate: 0.5
 
-# --- Router & Simulation Configuration ---
 routing_algo: "adaptive" 
 congestion_threshold: 0.75
 num_virtual_channels: 4
 router_buffer_size: 8
-simulation_cycles: 3000   # Increased cycles for potentially more complex scenarios
+simulation_cycles: 3000   

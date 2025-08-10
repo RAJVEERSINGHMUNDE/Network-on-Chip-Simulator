@@ -1,29 +1,20 @@
-# noc/network.py
 import math
 from .router import Router, Port
 
 class Network:
     def __init__(self, config: dict, topology_override: str = None):
-        """
-        Initializes the network.
-        FIX 1: Added 'topology_override' to allow the simulator to create
-               different network types for the hybrid architecture.
-        """
         self.config = config
         self.num_gpus = config['num_gpus']
         self.grid_width, self.grid_height = None, None
         self.routers: dict[any, Router] = {}
         self.connections: dict[Router, dict[int, tuple]] = {}
         self.node_to_router_map: dict[int, tuple] = {}
-        
-        # Use the override if provided, otherwise use the config file
         topology_name = topology_override if topology_override else self.config.get('topology', 'mesh')
-        
-        print(f"--- Creating a {topology_name} network ---")
+        print(f"{topology_name}")
 
         if topology_name in ['mesh', 'torus']:
             if not math.sqrt(self.num_gpus).is_integer():
-                raise ValueError("Mesh/Torus requires num_gpus to be a perfect square.")
+                raise ValueError("Not a Perfect Square")
             self.grid_width = int(math.sqrt(self.num_gpus))
             self.grid_height = self.grid_width
 
@@ -31,10 +22,6 @@ class Network:
         elif topology_name == 'torus': self._create_torus()
         elif topology_name == 'fat_tree': self._create_fat_tree()
         else: raise ValueError(f"Unknown topology: {topology_name}")
-        
-        # --- FIX 2: Added the creation of the reverse lookup map ---
-        # This was the cause of the previous 'router_port_to_node_map' error and
-        # is critical for the simulator's ejection logic to work.
         self.router_port_to_node_map: dict[tuple[Router, Port], int] = \
             {val: key for key, val in self.node_to_router_map.items()}
 
@@ -70,11 +57,11 @@ class Network:
 
     def _create_fat_tree(self):
         k = self.config.get('fat_tree_k', 4)
-        if k % 2 != 0: raise ValueError("k must be even.")
+        if k % 2 != 0: raise ValueError("k has to even.")
         num_pods, nodes_per_switch = k, k // 2
         num_edge_switches, num_core_switches = num_pods * nodes_per_switch, (k // 2)**2
         expected_nodes = num_edge_switches * nodes_per_switch
-        if self.num_gpus != expected_nodes: raise ValueError(f"k={k} Fat-Tree supports {expected_nodes} nodes, not {self.num_gpus}")
+        if self.num_gpus != expected_nodes: raise ValueError(f"k={k} Fat-Tree only supports {expected_nodes} nodes, not {self.num_gpus}")
         num_vcs = self.config['num_virtual_channels']
         core_switches = [Router(f'c_{i}', num_ports=k, num_vcs=num_vcs, network=self, config=self.config) for i in range(num_core_switches)]
         edge_switches = [Router(f'e_{p}_{s}', num_ports=k, num_vcs=num_vcs, network=self, config=self.config) for p in range(num_pods) for s in range(k//2)]

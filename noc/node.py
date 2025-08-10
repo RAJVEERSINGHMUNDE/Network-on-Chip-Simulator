@@ -22,7 +22,6 @@ class Node:
         self.packets_sent = 0
         self.packets_received = 0
 
-        # --- NEW: Check for hybrid electrical configuration ---
         self.secondary_traffic_patterns = []
         if config.get('architecture') == 'hybrid_electrical':
             self.secondary_traffic_patterns = config['hybrid_electrical_config']['secondary_traffic']
@@ -31,7 +30,6 @@ class Node:
         flits = []
         payload = packet.data_payload
         
-        # --- UPDATED: Decide if these flits should use the secondary network ---
         use_secondary = self.traffic_pattern in self.secondary_traffic_patterns
         
         common_args = {
@@ -53,7 +51,7 @@ class Node:
     def _get_destination(self) -> int:
         if self.traffic_pattern == "transpose":
             if self.coords is None:
-                warnings.warn(f"Node {self.node_id}: 'transpose' pattern is only valid for grid topologies. Falling back to uniform_random.")
+                warnings.warn(f"Node {self.node_id}: 'transpose' pattern is only valid for grid topologies.to uniform_random.")
             else:
                 dest_y, dest_x = self.coords
                 dest_id = dest_y * self.grid_width + dest_x

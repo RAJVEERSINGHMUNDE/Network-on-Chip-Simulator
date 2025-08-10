@@ -1,5 +1,3 @@
-# dashboard.py
-
 import dash
 from dash import dcc, html, Input, Output, State
 import yaml
@@ -93,7 +91,6 @@ app.layout = html.Div([
         html.Label("Number of Virtual Channels:"),
         dcc.Input(id='num-vcs-input', type='number', value=4, min=1, step=1),
         
-        # This input will now be controlled by a callback
         html.Div(id='sim-cycles-div', children=[
              html.Label("Simulation Cycles:"),
              dcc.Input(id='sim-cycles-input', type='number', value=3000, min=100, step=100),
@@ -131,17 +128,14 @@ def toggle_workload_options(traffic_pattern):
         return {'display': 'block'}
     return {'display': 'none'}
 
-# --- NEW CALLBACK TO HIDE SIMULATION CYCLES INPUT ---
 @app.callback(
     Output('sim-cycles-div', 'style'),
     Input('traffic-pattern-dropdown', 'value')
 )
 def toggle_sim_cycles_visibility(traffic_pattern):
-    """Hides the simulation cycles input if a workload is selected."""
     if traffic_pattern == 'all_reduce':
-        # Hide the input because the simulation will run until the workload is complete
         return {'display': 'none'}
-    # Show the input for all other traffic patterns
+
     return {'display': 'block'}
 
 
@@ -211,7 +205,6 @@ def run_single_sim(sim_config: dict) -> float:
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             simulator = Simulator(config=sim_config)
-            # The simulator's run method now handles whether to use num_cycles or not
             simulator.run(num_cycles=sim_config['simulation_cycles'])
             avg_latency = simulator.tracker.calculate_average_latency()
             if w:

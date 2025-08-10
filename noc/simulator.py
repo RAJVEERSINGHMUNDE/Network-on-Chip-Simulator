@@ -1,5 +1,3 @@
-# noc/simulator.py
-
 from .network import Network
 from .node import Node
 from .router import Router
@@ -8,7 +6,7 @@ from .workload import AllReduceWorkload
 
 class Simulator:
     def __init__(self, config: dict):
-        print("Initializing simulator...")
+        print("Starting simulator")
         self.config = config
         self.architecture = config.get('architecture', 'monolithic')
         self.num_gpus = config['num_gpus']
@@ -40,17 +38,9 @@ class Simulator:
         self.current_cycle = 0
     
     def run(self, num_cycles: int):
-        """
-        Runs the simulation.
-        - If a workload is present, it runs until the workload is complete.
-        - Otherwise, it runs for the fixed number of cycles specified.
-        """
-        # --- START: MODIFIED RUN LOGIC ---
         if self.workload:
-            print("Running workload-driven simulation until completion...")
+            print("Running workload-driven simulation until completion")
             self.workload.initialize(self.current_cycle)
-
-            # Safety break to prevent infinite loops in case of a bug
             timeout_cycles = self.config.get('simulation_timeout_cycles', 500000)
 
             while not self.workload.is_complete():
@@ -59,19 +49,16 @@ class Simulator:
                     print(f"ERROR: Simulation timed out after {timeout_cycles} cycles. Possible deadlock or bug.")
                     break
         else:
-            # Original behavior for synthetic traffic
             print(f"Running simulation for {num_cycles} cycles...")
             for i in range(num_cycles):
                 if i % 500 == 0 and i > 0:
                     print(f"--- Cycle {i} ---")
                 self._single_cycle()
         
-        print(f"--- Simulation finished at cycle {self.current_cycle} ---")
-        # --- END: MODIFIED RUN LOGIC ---
+        print(f"Simulation finished at cycle {self.current_cycle} ---")
 
 
     def _process_network_cycle(self, network: Network | None):
-        """Helper function to run one cycle for a given network instance."""
         if not network: return
 
         forwarding_decisions = {r: r.process_cycle() for r in network.routers.values()}
@@ -96,11 +83,10 @@ class Simulator:
                         )
 
     def _single_cycle(self):
-        # 1. Process a full cycle for EACH network
+
         self._process_network_cycle(self.primary_network)
         self._process_network_cycle(self.secondary_network)
 
-        # 2. Inject flits from Nodes into the correct network
         for node in self.nodes:
             if node.injection_queue:
                 flit_to_inject = node.injection_queue[0]
@@ -114,7 +100,6 @@ class Simulator:
                     router, port = self.primary_network.node_to_router_map[node.node_id]
                     router.input_buffers[port][flit.vc_id].append(flit)
 
-        # 3. Nodes generate new traffic for the *next* cycle
         if not self.workload:
             for node in self.nodes:
                 node.process_cycle(self.current_cycle)
@@ -127,7 +112,7 @@ class Simulator:
             self.workload.initialize(self.current_cycle)
         for i in range(num_cycles):
             if i % 500 == 0 and i > 0:
-                print(f"--- Cycle {i} ---")
+                print(f"Cycle {i}")
             self._single_cycle()
-        print(f"--- Cycle {self.current_cycle} ---")
+        print(f"Cycle {self.current_cycle}")
         print("Simulation finished.")

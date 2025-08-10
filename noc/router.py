@@ -1,12 +1,9 @@
-# ai_gpu_grid_sim/noc/router.py
-
 import collections
 import math
 from enum import IntEnum, auto
 import random
 from .packet import Flit
 
-# Forward declaration for type hinting
 class Network:
     pass
 
@@ -26,7 +23,6 @@ class Router:
         self.input_buffers: dict[int, list] = {p: [collections.deque() for _ in range(num_vcs)] for p in range(num_ports)}
         self.vc_arbiter_state: dict[int, int] = {p: 0 for p in range(num_ports)}
         
-        # Router identity attributes
         self.type, self.pod_id, self.switch_id, self.coords, self.grid_width = None, None, None, None, None
         if isinstance(router_id, tuple):
             self.type = 'grid'
@@ -126,10 +122,10 @@ class Router:
                             out_port = self._compute_route_fat_tree(head_flit)
                     elif self.type == 'grid':
                         if routing_algo == 'adaptive':
-                            # --- START: THIS IS THE FIX ---
-                            # Corrected typo from 'out_tport' to 'out_port'
+                           
+                           #out_port is broken
                             out_port = self._compute_route_adaptive(head_flit)
-                            # --- END: THIS IS THE FIX ---
+    
                         else:
                             out_port = self._compute_route_xy(head_flit)
                     else:
