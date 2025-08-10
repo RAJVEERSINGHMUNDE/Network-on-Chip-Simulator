@@ -3,27 +3,43 @@ import math
 from .router import Router, Port
 
 class Network:
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, topology_override: str = None):
+        """
+        Initializes the network.
+        FIX 1: Added 'topology_override' to allow the simulator to create
+               different network types for the hybrid architecture.
+        """
         self.config = config
         self.num_gpus = config['num_gpus']
         self.grid_width, self.grid_height = None, None
         self.routers: dict[any, Router] = {}
         self.connections: dict[Router, dict[int, tuple]] = {}
         self.node_to_router_map: dict[int, tuple] = {}
-        topology_name = self.config.get('topology', 'mesh')
+        
+        # Use the override if provided, otherwise use the config file
+        topology_name = topology_override if topology_override else self.config.get('topology', 'mesh')
+        
+        print(f"--- Creating a {topology_name} network ---")
+
         if topology_name in ['mesh', 'torus']:
             if not math.sqrt(self.num_gpus).is_integer():
                 raise ValueError("Mesh/Torus requires num_gpus to be a perfect square.")
             self.grid_width = int(math.sqrt(self.num_gpus))
             self.grid_height = self.grid_width
+
         if topology_name == 'mesh': self._create_mesh()
         elif topology_name == 'torus': self._create_torus()
         elif topology_name == 'fat_tree': self._create_fat_tree()
         else: raise ValueError(f"Unknown topology: {topology_name}")
+        
+        # --- FIX 2: Added the creation of the reverse lookup map ---
+        # This was the cause of the previous 'router_port_to_node_map' error and
+        # is critical for the simulator's ejection logic to work.
+        self.router_port_to_node_map: dict[tuple[Router, Port], int] = \
+            {val: key for key, val in self.node_to_router_map.items()}
 
     def _create_mesh(self):
         num_vcs = self.config['num_virtual_channels']
-        print(f"Creating a {self.grid_width}x{self.grid_height} mesh...")
         for y in range(self.grid_height):
             for x in range(self.grid_width):
                 coords = (x, y)
@@ -39,7 +55,6 @@ class Network:
 
     def _create_torus(self):
         num_vcs = self.config['num_virtual_channels']
-        print(f"Creating a {self.grid_width}x{self.grid_height} torus...")
         for y in range(self.grid_height):
             for x in range(self.grid_width):
                 coords = (x, y)
@@ -61,7 +76,6 @@ class Network:
         expected_nodes = num_edge_switches * nodes_per_switch
         if self.num_gpus != expected_nodes: raise ValueError(f"k={k} Fat-Tree supports {expected_nodes} nodes, not {self.num_gpus}")
         num_vcs = self.config['num_virtual_channels']
-        print(f"Creating a k={k} Fat-Tree...")
         core_switches = [Router(f'c_{i}', num_ports=k, num_vcs=num_vcs, network=self, config=self.config) for i in range(num_core_switches)]
         edge_switches = [Router(f'e_{p}_{s}', num_ports=k, num_vcs=num_vcs, network=self, config=self.config) for p in range(num_pods) for s in range(k//2)]
         for r in core_switches + edge_switches: self.routers[r.router_id] = r

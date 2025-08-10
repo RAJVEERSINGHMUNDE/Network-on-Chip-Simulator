@@ -13,21 +13,16 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-# We now need the Simulator and potentially the workload classes
 from noc.simulator import Simulator
 
 def create_plot(x_data, y_data, config, title_extra, xlabel):
-    """Generates a base64-encoded plot with dynamic labels."""
     plt.figure(figsize=(10, 6))
     plt.plot(x_data, y_data, marker='o', linestyle='-')
-    
-    topology = config.get('topology', 'N/A')
-    
-    plt.title(f'Network Performance: {topology.capitalize()} under {title_extra}')
+    arch = config.get('architecture', 'monolithic').replace('_', ' ').title()
+    plt.title(f'Network Performance: {arch} under {title_extra}')
     plt.xlabel(xlabel)
     plt.ylabel('Average Packet Latency (cycles)')
     plt.grid(True)
-    
     buf = io.BytesIO()
     plt.savefig(buf, format='png')
     plt.close()
@@ -39,111 +34,147 @@ app = dash.Dash(__name__)
 app.layout = html.Div([
     html.H1("AI GPU Grid - NoC Simulator Dashboard"),
     
-    # --- Configuration Panel ---
     html.Div([
         html.H3("Simulation Configuration"),
         
-        html.Label("Topology:"),
-        dcc.Dropdown(
-            id='topology-dropdown',
+        html.Label("Architecture:"),
+        dcc.RadioItems(
+            id='architecture-radio',
             options=[
-                {'label': '2D Mesh', 'value': 'mesh'},
-                {'label': '2D Torus', 'value': 'torus'},
-                {'label': 'Fat-Tree', 'value': 'fat_tree'},
-                {'label': 'Flattened Butterfly (Not Implemented)', 'value': 'flattened_butterfly', 'disabled': True}
+                {'label': 'Monolithic Electrical', 'value': 'monolithic'},
+                {'label': 'Hybrid Electrical', 'value': 'hybrid_electrical'},
             ],
-            value='mesh'
+            value='monolithic',
+            labelStyle={'display': 'inline-block', 'margin-right': '20px'}
         ),
-        
-        html.Label("Traffic Pattern:"),
-        dcc.Dropdown(
-            id='traffic-pattern-dropdown',
-            options=[
-                {'label': 'Uniform Random', 'value': 'uniform_random'},
-                {'label': 'Transpose', 'value': 'transpose'},
-                {'label': 'Hotspot', 'value': 'hotspot'},
-                {'label': 'All-Reduce Workload', 'value': 'all_reduce'},
-            ],
-            value='uniform_random'
-        ),
+        html.Hr(),
 
-        html.Label("Routing Algorithm (Mesh/Torus/Fat-Tree):"),
-        dcc.Dropdown(
-            id='routing-algo-dropdown',
-            options=[
-                {'label': 'Deterministic (XY or Up/Down)', 'value': 'deterministic'},
-                {'label': 'Adaptive', 'value': 'adaptive'}
-            ],
-            value='adaptive'
-        ),
+        html.Div(id='primary-topo-div', children=[
+            html.Label("Primary Topology:"),
+            dcc.Dropdown(
+                id='primary-topology-dropdown',
+                options=[
+                    {'label': '2D Mesh', 'value': 'mesh'},
+                    {'label': '2D Torus', 'value': 'torus'},
+                ], value='mesh'
+            )
+        ]),
+
+        html.Div(id='secondary-topo-div', style={'display': 'none'}, children=[
+            html.Label("Secondary Topology (for collectives):"),
+            dcc.Dropdown(
+                id='secondary-topology-dropdown',
+                options=[{'label': 'Fat-Tree', 'value': 'fat_tree'}],
+                value='fat_tree'
+            )
+        ]),
+
+        html.Label("Traffic Pattern:"),
+        dcc.Dropdown(id='traffic-pattern-dropdown', options=[
+            {'label': 'Uniform Random', 'value': 'uniform_random'},
+            {'label': 'Transpose', 'value': 'transpose'},
+            {'label': 'Hotspot', 'value': 'hotspot'},
+            {'label': 'All-Reduce Workload', 'value': 'all_reduce'},
+        ], value='uniform_random'),
+
+        html.Div(id='all-reduce-options', style={'display': 'none'}, children=[
+            html.H4("All-Reduce Workload Settings"),
+            html.Label("Packet Size (Flits per chunk):"),
+            dcc.Input(id='ar-chunk-size-input', type='number', value=4, min=1),
+            html.P("Experiment sweeps over the total number of data chunks."),
+        ]),
+
+        html.Label("Routing Algorithm:"),
+        dcc.Dropdown(id='routing-algo-dropdown', options=[
+            {'label': 'Deterministic (XY or Up/Down)', 'value': 'deterministic'},
+            {'label': 'Adaptive', 'value': 'adaptive'}
+        ], value='adaptive'),
         
         html.Label("Number of Virtual Channels:"),
         dcc.Input(id='num-vcs-input', type='number', value=4, min=1, step=1),
         
-        html.Label("Simulation Cycles:"),
-        dcc.Input(id='sim-cycles-input', type='number', value=2000, min=100, step=100),
-        html.Hr(),
-
-        # --- Dynamic Options based on Traffic Pattern ---
-        # Options for All-Reduce Workload
-        html.Div(id='all-reduce-options', style={'display': 'none'}, children=[
-            html.H4("All-Reduce Workload Settings"),
-            html.Label("Packet Size (Number of Flits per chunk):"),
-            dcc.Input(id='ar-chunk-size-input', type='number', value=4, min=1),
-            html.P("The experiment will sweep over the total number of data chunks."),
+        # This input will now be controlled by a callback
+        html.Div(id='sim-cycles-div', children=[
+             html.Label("Simulation Cycles:"),
+             dcc.Input(id='sim-cycles-input', type='number', value=3000, min=100, step=100),
         ]),
+        html.Hr(),
 
         html.Button('Run Experiment Sweep', id='run-button', n_clicks=0),
         
     ], style={'width': '30%', 'display': 'inline-block', 'verticalAlign': 'top', 'padding': '10px'}),
     
-    # --- Results Panel ---
     html.Div([
         html.H3("Results"),
-        dcc.Loading(
-            id="loading-spinner", type="circle",
-            children=[
-                html.Div(id='results-summary'),
-                html.Img(id='results-graph', style={'width': '100%'})
-            ]
-        )
+        dcc.Loading(id="loading-spinner", type="circle", children=[
+            html.Div(id='results-summary'),
+            html.Img(id='results-graph', style={'width': '100%'})
+        ])
     ], style={'width': '65%', 'display': 'inline-block', 'verticalAlign': 'top', 'padding': '10px'})
 ])
+
+@app.callback(
+    Output('secondary-topo-div', 'style'),
+    Input('architecture-radio', 'value')
+)
+def toggle_secondary_topo_options(architecture):
+    if architecture == 'hybrid_electrical':
+        return {'display': 'block'}
+    return {'display': 'none'}
 
 @app.callback(
     Output('all-reduce-options', 'style'),
     Input('traffic-pattern-dropdown', 'value')
 )
 def toggle_workload_options(traffic_pattern):
-    """Shows or hides the All-Reduce options based on the selected traffic pattern."""
     if traffic_pattern == 'all_reduce':
         return {'display': 'block'}
-    else:
+    return {'display': 'none'}
+
+# --- NEW CALLBACK TO HIDE SIMULATION CYCLES INPUT ---
+@app.callback(
+    Output('sim-cycles-div', 'style'),
+    Input('traffic-pattern-dropdown', 'value')
+)
+def toggle_sim_cycles_visibility(traffic_pattern):
+    """Hides the simulation cycles input if a workload is selected."""
+    if traffic_pattern == 'all_reduce':
+        # Hide the input because the simulation will run until the workload is complete
         return {'display': 'none'}
+    # Show the input for all other traffic patterns
+    return {'display': 'block'}
+
 
 @app.callback(
     [Output('results-summary', 'children'), Output('results-graph', 'src')],
     Input('run-button', 'n_clicks'),
-    [State('topology-dropdown', 'value'), State('traffic-pattern-dropdown', 'value'),
-     State('routing-algo-dropdown', 'value'), State('num-vcs-input', 'value'),
+    [State('architecture-radio', 'value'),
+     State('primary-topology-dropdown', 'value'),
+     State('secondary-topology-dropdown', 'value'),
+     State('traffic-pattern-dropdown', 'value'),
+     State('routing-algo-dropdown', 'value'),
+     State('num-vcs-input', 'value'),
      State('sim-cycles-input', 'value'),
-     # Add state for new All-Reduce inputs
      State('ar-chunk-size-input', 'value')]
 )
-def run_simulation_sweep(n_clicks, topology, traffic_pattern, routing_algo, num_vcs, sim_cycles, ar_chunk_size):
+def run_simulation_sweep(n_clicks, arch, p_topo, s_topo, pattern, routing, vcs, cycles, ar_chunk):
     if n_clicks == 0:
         return "Click 'Run Experiment Sweep' to start.", ""
 
-    # Load base config and update with UI values
     with open('config.yaml', 'r') as f:
         config = yaml.safe_load(f)
+
+    config['architecture'] = arch
+    config['topology'] = p_topo
+    if arch == 'hybrid_electrical':
+        if 'hybrid_electrical_config' not in config: config['hybrid_electrical_config'] = {}
+        config['hybrid_electrical_config']['secondary_topology'] = s_topo
+    
     config.update({
-        'topology': topology, 'traffic_pattern': traffic_pattern,
-        'routing_algo': routing_algo, 'num_virtual_channels': num_vcs,
-        'simulation_cycles': sim_cycles
+        'traffic_pattern': pattern, 'routing_algo': routing,
+        'num_virtual_channels': vcs, 'simulation_cycles': cycles
     })
     
-    # Set seed for reproducibility
     seed = config.get('random_seed', None)
     if seed:
         random.seed(seed)
@@ -151,56 +182,45 @@ def run_simulation_sweep(n_clicks, topology, traffic_pattern, routing_algo, num_
 
     latencies = []
     
-    # --- Logic to select the correct sweep experiment ---
-    if traffic_pattern == 'all_reduce':
-        # For All-Reduce, sweep over the number of chunks to see how latency scales with data size
-        sweep_values = np.arange(4, 33, 4) # Sweep from 4 to 32 chunks
+    if pattern == 'all_reduce':
+        sweep_values = np.arange(4, 33, 4)
         xlabel = "Number of Data Chunks per Node for All-Reduce"
         title_extra = '"All-Reduce" Workload'
-
         for num_chunks in sweep_values:
             sim_config = config.copy()
-            sim_config['workload'] = {
-                'all_reduce_data_size': int(num_chunks),
-                'all_reduce_chunk_size_flits': ar_chunk_size
-            }
-            avg_latency = run_single_sim(sim_config)
-            latencies.append(avg_latency)
-
-    else: # For synthetic patterns, sweep over injection rate
+            if 'workload' not in sim_config: sim_config['workload'] = {}
+            sim_config['workload']['all_reduce_data_size'] = int(num_chunks)
+            sim_config['workload']['all_reduce_chunk_size_flits'] = ar_chunk
+            latencies.append(run_single_sim(sim_config))
+    else:
         sweep_values = np.arange(0.01, 0.16, 0.02)
         xlabel = "Injection Rate (packets/node/cycle)"
-        title_extra = f'"{traffic_pattern}" Load'
-
+        title_extra = f'"{pattern}" Load on {p_topo.capitalize()}'
         for rate in sweep_values:
             sim_config = config.copy()
             sim_config['injection_rate'] = rate
-            avg_latency = run_single_sim(sim_config)
-            latencies.append(avg_latency)
+            latencies.append(run_single_sim(sim_config))
 
-    summary_text = f"Experiment Complete. Topology: {topology.capitalize()}, Pattern: {traffic_pattern}, Routing: {routing_algo}, VCs: {num_vcs}."
+    summary_text = f"Experiment Complete. Architecture: {arch.replace('_', ' ').title()}."
     graph_src = create_plot(sweep_values, latencies, config, title_extra, xlabel)
     
     return summary_text, graph_src
 
 def run_single_sim(sim_config: dict) -> float:
-    """Helper function to instantiate and run a single simulator instance."""
     try:
-        # Use a warnings context to catch and print potential issues
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            
             simulator = Simulator(config=sim_config)
+            # The simulator's run method now handles whether to use num_cycles or not
             simulator.run(num_cycles=sim_config['simulation_cycles'])
             avg_latency = simulator.tracker.calculate_average_latency()
-            
             if w:
                 for warning_message in w:
                     print(f"Warning: {warning_message.message}")
             return avg_latency
     except Exception as e:
         print(f"An error occurred during simulation: {e}")
-        return 0.0 # Return 0 latency on error
+        return 0.0
 
 if __name__ == '__main__':
     app.run(debug=True)
